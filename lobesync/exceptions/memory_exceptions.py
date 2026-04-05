@@ -1,0 +1,2 @@
+class MemoryNotFoundError(Exception):
+    pass
