@@ -1,12 +1,10 @@
 import logging
 import os
-import readline  # enables arrow keys, history in input()
 from sqlmodel import Session
 from rich.console import Console
 from rich.panel import Panel
 
 from lobesync.wizard import run_wizard, load_config, BANNER
-from lobesync.cli.commands import handle_command
 
 logging.basicConfig(level=logging.WARNING)
 console = Console()
@@ -28,6 +26,7 @@ def main():
     from lobesync.db.repos.chat_repo import create_chat_session
     from lobesync.db.repos.memory_repo import get_all_memories
     from lobesync.agent.graph import build_graph
+    from lobesync.cli.commands import handle_command
 
     init_db()
 
