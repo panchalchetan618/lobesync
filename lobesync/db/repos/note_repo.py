@@ -1,14 +1,18 @@
-from sqlmodel import Session, select
-from sqlalchemy.exc import SQLAlchemyError
-from lobesync.db.models import Note
-from typing import List
 import logging
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
+
+from lobesync.db.models import Note
 
 logger = logging.getLogger(__name__)
 
 
-def create_note(session: Session, title: str, content: str, description: str | None = None) -> Note | None:
+def create_note(
+    session: Session, title: str, content: str, description: str | None = None
+) -> Note | None:
     """
     Creates and persists a new note.
 
@@ -32,7 +36,7 @@ def create_note(session: Session, title: str, content: str, description: str | N
         return None
 
 
-def get_all_notes(session: Session) -> List[Note] | None:
+def get_all_notes(session: Session) -> Sequence[Note] | None:
     """
     Retrieves all notes.
 
@@ -68,7 +72,9 @@ def get_note_by_id(session: Session, note_id: int) -> Note | None:
         return None
 
 
-def update_note(session: Session, note_id: int, title: str | None = None, content: str | None = None) -> Note | None:
+def update_note(
+    session: Session, note_id: int, title: str | None = None, content: str | None = None
+) -> Note | None:
     """
     Updates title and/or content on an existing note. Only non-None arguments are applied.
 
@@ -89,7 +95,7 @@ def update_note(session: Session, note_id: int, title: str | None = None, conten
             note.title = title
         if content is not None:
             note.content = content
-        note.updated_at = datetime.now()
+        note.updated_at = datetime.now(UTC)
         session.add(note)
         session.flush()
         session.refresh(note)

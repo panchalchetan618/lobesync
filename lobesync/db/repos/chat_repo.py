@@ -1,9 +1,11 @@
-from sqlmodel import Session, select
-from sqlalchemy.exc import SQLAlchemyError
-from lobesync.db.models import ChatSession, Message, MessageRole, ToolCall
-from typing import List
 import logging
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
+
+from lobesync.db.models import ChatSession, Message, MessageRole, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +13,7 @@ logger = logging.getLogger(__name__)
 # --- ChatSession ---
 
 
-def create_chat_session(
-    session: Session, name: str | None = None
-) -> ChatSession | None:
+def create_chat_session(session: Session, name: str | None = None) -> ChatSession | None:
     """
     Creates and persists a new chat session.
 
@@ -35,9 +35,7 @@ def create_chat_session(
         return None
 
 
-def get_chat_session_by_id(
-    session: Session, chat_session_id: int
-) -> ChatSession | None:
+def get_chat_session_by_id(session: Session, chat_session_id: int) -> ChatSession | None:
     """
     Retrieves a chat session by primary key.
 
@@ -55,7 +53,7 @@ def get_chat_session_by_id(
         return None
 
 
-def get_all_chat_sessions(session: Session) -> List[ChatSession] | None:
+def get_all_chat_sessions(session: Session) -> Sequence[ChatSession] | None:
     """
     Retrieves all chat sessions.
 
@@ -92,7 +90,7 @@ def update_chat_session_summary(
         if not chat_session:
             return None
         chat_session.summary = summary
-        chat_session.updated_at = datetime.now()
+        chat_session.updated_at = datetime.now(UTC)
         session.add(chat_session)
         session.flush()
         session.refresh(chat_session)
@@ -144,9 +142,7 @@ def create_message(
         return None
 
 
-def get_messages_by_session(
-    session: Session, chat_session_id: int
-) -> List[Message] | None:
+def get_messages_by_session(session: Session, chat_session_id: int) -> Sequence[Message] | None:
     """
     Retrieves all messages for a session, ordered by creation time (oldest first).
 
@@ -161,7 +157,7 @@ def get_messages_by_session(
         messages = session.exec(
             select(Message)
             .where(Message.chat_session_id == chat_session_id)
-            .order_by(Message.created_at)
+            .order_by(Message.created_at)  # type: ignore[arg-type]
         ).all()
         return messages or None
     except SQLAlchemyError as e:
@@ -204,9 +200,7 @@ def create_tool_call(
         return None
 
 
-def get_tool_calls_by_message(
-    session: Session, message_id: int
-) -> List[ToolCall] | None:
+def get_tool_calls_by_message(session: Session, message_id: int) -> Sequence[ToolCall] | None:
     """
     Retrieves all tool calls associated with a message.
 
@@ -218,9 +212,7 @@ def get_tool_calls_by_message(
         List[ToolCall] | None: Tool calls for that message if any, otherwise None.
     """
     try:
-        tool_calls = session.exec(
-            select(ToolCall).where(ToolCall.message_id == message_id)
-        ).all()
+        tool_calls = session.exec(select(ToolCall).where(ToolCall.message_id == message_id)).all()
         return tool_calls or None
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tool_calls_by_message] Failed. Error: {e}")

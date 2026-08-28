@@ -1,12 +1,15 @@
-from sqlmodel import Session, select
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.table import Table
+from sqlmodel import Session, select
 
-from lobesync.db.database import engine
-from lobesync.db.models import ChatSession, Message
-from lobesync.db.repos.chat_repo import create_chat_session, get_all_chat_sessions, get_chat_session_by_id
+from lobesync.db.database import get_engine
+from lobesync.db.models import Message
+from lobesync.db.repos.chat_repo import (
+    create_chat_session,
+    get_all_chat_sessions,
+    get_chat_session_by_id,
+)
 
 console = Console()
 
@@ -24,13 +27,13 @@ HELP_TEXT = """
 
 
 def _message_count(session: Session, chat_session_id: int) -> int:
-    return len(session.exec(
-        select(Message).where(Message.chat_session_id == chat_session_id)
-    ).all())
+    return len(
+        session.exec(select(Message).where(Message.chat_session_id == chat_session_id)).all()
+    )
 
 
 def cmd_list_sessions(app_state: dict):
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         sessions = get_all_chat_sessions(session) or []
 
         table = Table(title="Chat Sessions", border_style="cyan", show_lines=True)
@@ -41,8 +44,12 @@ def cmd_list_sessions(app_state: dict):
         table.add_column("", width=8)
 
         for s in sessions:
+            if s.id is None:
+                continue
             count = _message_count(session, s.id)
-            active = "[bold green]active[/bold green]" if s.id == app_state["chat_session_id"] else ""
+            active = (
+                "[bold green]active[/bold green]" if s.id == app_state["chat_session_id"] else ""
+            )
             table.add_row(
                 str(s.id),
                 s.name or f"Session {s.id}",
@@ -58,13 +65,16 @@ def cmd_list_sessions(app_state: dict):
 
 def _load_memories_context(session: Session) -> str:
     from lobesync.db.repos.memory_repo import get_all_memories
+
     memories = get_all_memories(session) or []
     return "\n".join([f"- {m.key}: {m.content}" for m in memories])
 
 
 def cmd_new_session(app_state: dict, name: str | None = None):
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         chat_session = create_chat_session(session, name=name)
+        if chat_session is None or chat_session.id is None:
+            raise RuntimeError("Failed to create chat session")
         session.commit()
         session.refresh(chat_session)
         session_id = chat_session.id
@@ -73,11 +83,13 @@ def cmd_new_session(app_state: dict, name: str | None = None):
 
     app_state["chat_session_id"] = session_id
     app_state["memories_context"] = memories_context
-    console.print(f"\n[bold green]Switched to new session:[/bold green] [cyan]{session_name}[/cyan] (ID: {session_id})\n")
+    console.print(
+        f"\n[bold green]Switched to new session:[/bold green] [cyan]{session_name}[/cyan] (ID: {session_id})\n"
+    )
 
 
 def cmd_switch_session(app_state: dict, session_id: int):
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         chat_session = get_chat_session_by_id(session, session_id)
         if not chat_session:
             console.print(f"\n[red]Session {session_id} not found.[/red]\n")
@@ -87,7 +99,9 @@ def cmd_switch_session(app_state: dict, session_id: int):
 
     app_state["chat_session_id"] = session_id
     app_state["memories_context"] = memories_context
-    console.print(f"\n[bold green]Switched to:[/bold green] [cyan]{session_name}[/cyan] (ID: {session_id})\n")
+    console.print(
+        f"\n[bold green]Switched to:[/bold green] [cyan]{session_name}[/cyan] (ID: {session_id})\n"
+    )
 
 
 def handle_command(raw: str, app_state: dict) -> bool:
@@ -114,5 +128,7 @@ def handle_command(raw: str, app_state: dict) -> bool:
                 console.print("[red]Usage: /session, /session new [name], /session <id>[/red]")
         return True
 
-    console.print(f"[red]Unknown command: {cmd}[/red]  Type [bold]/help[/bold] for available commands.")
+    console.print(
+        f"[red]Unknown command: {cmd}[/red]  Type [bold]/help[/bold] for available commands."
+    )
     return True

@@ -1,10 +1,14 @@
-from sqlmodel import Session, select, or_
-from sqlalchemy.exc import SQLAlchemyError
-from lobesync.db.models import MEMORY_TYPE, Memory
 import logging
-from typing import List
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, or_, select
+
+from lobesync.db.models import MEMORY_TYPE, Memory
 
 logger = logging.getLogger(__name__)
+
 
 def create_memory(session: Session, key: str, content: str, type: MEMORY_TYPE) -> Memory | None:
     """
@@ -29,7 +33,8 @@ def create_memory(session: Session, key: str, content: str, type: MEMORY_TYPE) -
         logger.error(f"[(REPO) create_memory] Failed to create memory. Error: {e}")
         return None
 
-def get_all_memories(session: Session) -> List[Memory] | None:
+
+def get_all_memories(session: Session) -> Sequence[Memory] | None:
     """
     Get all memories.
 
@@ -49,7 +54,10 @@ def get_all_memories(session: Session) -> List[Memory] | None:
         logger.error(f"[(REPO) get_all_memories] Failed to get all memories. Error: {e}")
         return None
 
-def get_memories_by_matching_key_or_content(session: Session, query: str) -> List[Memory] | None:
+
+def get_memories_by_matching_key_or_content(
+    session: Session, query: str
+) -> Sequence[Memory] | None:
     """
     Retrieve memory records where either the key or content partially matches the given query.
 
@@ -66,14 +74,24 @@ def get_memories_by_matching_key_or_content(session: Session, query: str) -> Lis
     """
 
     try:
-        memories = session.exec(select(Memory).where(or_(Memory.key.ilike(f"%{query}%"), Memory.content.ilike(f"%{query}%")))).all()
+        memories = session.exec(
+            select(Memory).where(
+                or_(
+                    Memory.key.ilike(f"%{query}%"),  # type: ignore[attr-defined]
+                    Memory.content.ilike(f"%{query}%"),  # type: ignore[attr-defined]
+                )
+            )
+        ).all()
         if not memories:
             return None
 
         return memories
     except SQLAlchemyError as e:
-        logger.error(f"[(REPO) get_memories_by_matching_key_or_content] Failed to get matching key memories. Error: {e}")
+        logger.error(
+            f"[(REPO) get_memories_by_matching_key_or_content] Failed to get matching key memories. Error: {e}"
+        )
         return None
+
 
 def get_memory_by_id(session: Session, id: int) -> Memory | None:
     """
@@ -94,7 +112,7 @@ def get_memory_by_id(session: Session, id: int) -> Memory | None:
         return None
 
 
-def get_memories_by_type(session: Session, memory_type: MEMORY_TYPE) -> List[Memory] | None:
+def get_memories_by_type(session: Session, memory_type: MEMORY_TYPE) -> Sequence[Memory] | None:
     """
     Get all memories filtered by type.
 
@@ -115,7 +133,7 @@ def get_memories_by_type(session: Session, memory_type: MEMORY_TYPE) -> List[Mem
         return None
 
 
-def get_memories_by_key(session: Session, key: str) -> List[Memory] | None:
+def get_memories_by_key(session: Session, key: str) -> Sequence[Memory] | None:
     """
     Get all memories with an exact key match.
 
@@ -136,7 +154,9 @@ def get_memories_by_key(session: Session, key: str) -> List[Memory] | None:
         return None
 
 
-def update_memory(session: Session, id: int, content: str | None = None, memory_type: MEMORY_TYPE | None = None) -> Memory | None:
+def update_memory(
+    session: Session, id: int, content: str | None = None, memory_type: MEMORY_TYPE | None = None
+) -> Memory | None:
     """
     Update content and/or type of an existing memory.
 
@@ -157,8 +177,7 @@ def update_memory(session: Session, id: int, content: str | None = None, memory_
             memory.content = content
         if memory_type is not None:
             memory.memory_type = memory_type
-        from datetime import datetime
-        memory.updated_at = datetime.now()
+        memory.updated_at = datetime.now(UTC)
         session.add(memory)
         session.flush()
         session.refresh(memory)

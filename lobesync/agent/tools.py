@@ -1,91 +1,146 @@
-from sqlmodel import Session
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
-from lobesync.db.models import TaskStatus, MEMORY_TYPE
-from lobesync.services.task_service import (
-    create_task_service,
-    get_all_tasks_service,
-    get_task_service,
-    get_task_by_title_service,
-    get_tasks_by_status_service,
-    get_tasks_by_checklist_service,
-    update_task_service,
-    delete_task_service,
-)
+from sqlmodel import Session
+
+from lobesync.db.models import MEMORY_TYPE, TaskStatus
 from lobesync.services.checklist_service import (
-    create_checklist_service,
-    get_all_checklists_service,
-    get_checklist_service,
-    update_checklist_service,
-    delete_checklist_service,
     create_checklist_item_service,
-    get_checklist_items_service,
-    toggle_checklist_item_service,
+    create_checklist_service,
     delete_checklist_item_service,
-)
-from lobesync.services.note_service import (
-    create_note_service,
-    get_all_notes_service,
-    get_note_service,
-    update_note_service,
-    delete_note_service,
+    delete_checklist_service,
+    get_all_checklists_service,
+    get_checklist_items_service,
+    get_checklist_service,
+    toggle_checklist_item_service,
+    update_checklist_service,
 )
 from lobesync.services.memory_service import (
-    upsert_memory_service,
+    delete_memory_service,
     get_all_memories_service,
     get_memories_by_type_service,
     search_memories_service,
     update_memory_service,
-    delete_memory_service,
+    upsert_memory_service,
+)
+from lobesync.services.note_service import (
+    create_note_service,
+    delete_note_service,
+    get_all_notes_service,
+    get_note_service,
+    update_note_service,
+)
+from lobesync.services.task_service import (
+    create_task_service,
+    delete_task_service,
+    get_all_tasks_service,
+    get_task_by_title_service,
+    get_task_service,
+    get_tasks_by_checklist_service,
+    get_tasks_by_status_service,
+    update_task_service,
 )
 
 
-def _create_task(session: Session, title: str, description: str | None = None, status: str = "pending", checklist_id: int | None = None, deadline: str | None = None):
+def _create_task(
+    session: Session,
+    title: str,
+    description: str | None = None,
+    status: str = "pending",
+    checklist_id: int | None = None,
+    deadline: str | None = None,
+):
     deadline_dt = datetime.fromisoformat(deadline) if deadline else None
-    return create_task_service(session, title, description, TaskStatus(status), checklist_id, deadline_dt)
+    return create_task_service(
+        session, title, description, TaskStatus(status), checklist_id, deadline_dt
+    )
+
 
 def _get_tasks_by_status(session: Session, status: str):
     return get_tasks_by_status_service(session, TaskStatus(status))
 
-def _update_task(session: Session, task_id: int, title: str | None = None, description: str | None = None, status: str | None = None, deadline: str | None = None):
+
+def _update_task(
+    session: Session,
+    task_id: int,
+    title: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    deadline: str | None = None,
+):
     deadline_dt = datetime.fromisoformat(deadline) if deadline else None
-    return update_task_service(session, task_id, title, description, TaskStatus(status) if status else None, deadline_dt)
+    return update_task_service(
+        session, task_id, title, description, TaskStatus(status) if status else None, deadline_dt
+    )
+
 
 def _upsert_memory(session: Session, key: str, content: str, memory_type: str = "preference"):
     return upsert_memory_service(session, key, content, MEMORY_TYPE(memory_type))
 
+
 def _get_memories_by_type(session: Session, memory_type: str):
     return get_memories_by_type_service(session, MEMORY_TYPE(memory_type))
 
-def _update_memory(session: Session, memory_id: int, content: str | None = None, memory_type: str | None = None):
-    return update_memory_service(session, memory_id, content, MEMORY_TYPE(memory_type) if memory_type else None)
+
+def _update_memory(
+    session: Session, memory_id: int, content: str | None = None, memory_type: str | None = None
+):
+    return update_memory_service(
+        session, memory_id, content, MEMORY_TYPE(memory_type) if memory_type else None
+    )
 
 
-TOOL_REGISTRY: dict[str, callable] = {
+ToolFunction = Callable[..., Any]
+
+
+TOOL_REGISTRY: dict[str, ToolFunction] = {
     # Tasks
     "create_task": _create_task,
     "get_all_tasks": lambda session, **_: get_all_tasks_service(session),
     "get_task": lambda session, task_id, **_: get_task_service(session, task_id),
     "get_task_by_title": lambda session, title, **_: get_task_by_title_service(session, title),
     "get_tasks_by_status": _get_tasks_by_status,
-    "get_tasks_by_checklist": lambda session, checklist_id, **_: get_tasks_by_checklist_service(session, checklist_id),
+    "get_tasks_by_checklist": lambda session, checklist_id, **_: get_tasks_by_checklist_service(
+        session, checklist_id
+    ),
     "update_task": _update_task,
     "delete_task": lambda session, task_id, **_: delete_task_service(session, task_id),
     # Checklists
-    "create_checklist": lambda session, title, description=None, **_: create_checklist_service(session, title, description),
+    "create_checklist": lambda session, title, description=None, **_: create_checklist_service(
+        session, title, description
+    ),
     "get_all_checklists": lambda session, **_: get_all_checklists_service(session),
-    "get_checklist": lambda session, checklist_id, **_: get_checklist_service(session, checklist_id),
-    "update_checklist": lambda session, checklist_id, title=None, description=None, **_: update_checklist_service(session, checklist_id, title, description),
-    "delete_checklist": lambda session, checklist_id, **_: delete_checklist_service(session, checklist_id),
-    "create_checklist_item": lambda session, checklist_id, title, description=None, **_: create_checklist_item_service(session, checklist_id, title, description),
-    "get_checklist_items": lambda session, checklist_id, **_: get_checklist_items_service(session, checklist_id),
-    "toggle_checklist_item": lambda session, item_id, **_: toggle_checklist_item_service(session, item_id),
-    "delete_checklist_item": lambda session, item_id, **_: delete_checklist_item_service(session, item_id),
+    "get_checklist": lambda session, checklist_id, **_: get_checklist_service(
+        session, checklist_id
+    ),
+    "update_checklist": lambda session, checklist_id, title=None, description=None, **_: (
+        update_checklist_service(session, checklist_id, title, description)
+    ),
+    "delete_checklist": lambda session, checklist_id, **_: delete_checklist_service(
+        session, checklist_id
+    ),
+    "create_checklist_item": lambda session, checklist_id, title, description=None, **_: (
+        create_checklist_item_service(session, checklist_id, title, description)
+    ),
+    "get_checklist_items": lambda session, checklist_id, **_: get_checklist_items_service(
+        session, checklist_id
+    ),
+    "toggle_checklist_item": lambda session, item_id, **_: toggle_checklist_item_service(
+        session, item_id
+    ),
+    "delete_checklist_item": lambda session, item_id, **_: delete_checklist_item_service(
+        session, item_id
+    ),
     # Notes
-    "create_note": lambda session, title, content, description=None, **_: create_note_service(session, title, content, description),
+    "create_note": lambda session, title, content, description=None, **_: create_note_service(
+        session, title, content, description
+    ),
     "get_all_notes": lambda session, **_: get_all_notes_service(session),
     "get_note": lambda session, note_id, **_: get_note_service(session, note_id),
-    "update_note": lambda session, note_id, title=None, content=None, **_: update_note_service(session, note_id, title, content),
+    "update_note": lambda session, note_id, title=None, content=None, **_: update_note_service(
+        session, note_id, title, content
+    ),
     "delete_note": lambda session, note_id, **_: delete_note_service(session, note_id),
     # Memories
     "upsert_memory": _upsert_memory,
@@ -116,12 +171,19 @@ MAKE_PLAN_TOOL = {
                     "items": {
                         "type": "object",
                         "properties": {
+                            "id": {
+                                "type": "string",
+                                "description": "Unique step id used by later references",
+                            },
                             "tool": {"type": "string", "description": "Tool name"},
-                            "args": {"type": "object", "description": "Tool arguments. Use '$tool_name.field' for references to previous results."}
+                            "args": {
+                                "type": "object",
+                                "description": "Tool arguments. Use '$tool_name.field' for references to previous results.",
+                            },
                         },
-                        "required": ["tool", "args"]
-                    }
-                }
+                        "required": ["id", "tool", "args"],
+                    },
+                },
             },
             "non_atomic": {
                 "type": "array",
@@ -129,15 +191,16 @@ MAKE_PLAN_TOOL = {
                 "items": {
                     "type": "object",
                     "properties": {
+                        "id": {"type": "string", "description": "Unique step id"},
                         "tool": {"type": "string", "description": "Tool name"},
-                        "args": {"type": "object", "description": "Tool arguments"}
+                        "args": {"type": "object", "description": "Tool arguments"},
                     },
-                    "required": ["tool", "args"]
-                }
+                    "required": ["id", "tool", "args"],
+                },
             },
         },
-        "required": ["atomic_groups", "non_atomic"]
-    }
+        "required": ["atomic_groups", "non_atomic"],
+    },
 }
 
 
@@ -186,8 +249,8 @@ Analyze the user's request and create an execution plan using make_plan.
 ## Planning Rules
 
 **atomic_groups**: Use when steps depend on each other. All steps in a group succeed or all roll back.
-- Reference earlier results with '$tool_name.field' (e.g. '$create_checklist.id')
-- Example: create_checklist then create_task with checklist_id = '$create_checklist.id'
+- Give every step a unique `id`. Reference earlier results with '$step_id.field' (e.g. '$launch_checklist.id').
+- Example: id='launch_checklist' create_checklist, then create_task with checklist_id = '$launch_checklist.id'.
 
 **non_atomic**: Use for independent operations. Each runs separately.
 - Example: create a note AND update an unrelated task status

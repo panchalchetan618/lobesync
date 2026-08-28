@@ -23,7 +23,7 @@ Lobesync: Updated "Write tests" to in progress. ✓
 - **Memories** — the agent proactively remembers personal facts about you across sessions
 - **Session management** — multiple conversations, each with its own history and incremental summary
 - **Streaming responses** with live Markdown rendering
-- **Cost-efficient** — single LLM call per turn (planner + executor + completion)
+- **Cost-efficient** — one LLM planning call per turn; execution and result rendering are local
 - **Local SQLite** by default — your data stays on your machine
 
 ## Architecture
@@ -46,8 +46,8 @@ user input
 
 - **Planner** — single LLM call (Haiku). Streams a direct response for chat, or calls `make_plan` for data operations. Receives user memories in system prompt (cached) + session summary + last 5 messages.
 - **Executor** — runs the plan. Atomic groups use one session (all-or-nothing). Independent steps run in separate sessions.
-- **Completion** — generates the final natural language response with tool results as context.
-- **Commitment** — saves user message, assistant message, and tool calls to DB. Regenerates session summary every 5 messages.
+- **Completion** — deterministically renders verified tool results, including item IDs.
+- **Commitment** — saves user messages, assistant messages, and tool calls to DB. Incrementally summarizes only unsummarized history every 5 messages.
 
 ## Installation
 
@@ -75,10 +75,12 @@ pip install -e .
 
 Run `lobesync` for the first time and the setup wizard will guide you through:
 
-1. Entering your [Anthropic API key](https://console.anthropic.com/)
+1. Choosing an LLM provider (Anthropic, OpenAI, Google, Groq, Mistral, or local Ollama) and entering its model name and API key
 2. Choosing a local SQLite database (recommended) or providing your own database URL
 
 Config is saved to `~/.lobesync/config.json`. Local database is stored at `~/.lobesync/lobesync.db`.
+
+Only providers whose LangChain package is installed appear in the wizard. To enable another provider, install its package first, e.g. `pip install langchain-openai`, then run setup again.
 
 ## Usage
 
@@ -128,17 +130,27 @@ Set via the setup wizard or in `~/.lobesync/config.json`:
 
 You can also use a `.env` file in the working directory or environment variables as fallback.
 
-## Models used
+## Model
 
-| Node | Model | Reason |
-|---|---|---|
-| Planner | `claude-haiku-4-5` | Fast, cheap, handles planning and direct chat |
-| Completion | `claude-haiku-4-5` | Generates final response from tool results |
-| Summarizer | `claude-haiku-4-5` | Compresses old conversation history |
+All nodes use the model configured during setup (`LLM_PROVIDER` + `LLM_MODEL` in `~/.lobesync/config.json`).
+
+## Quality and operations
+
+Schema changes are versioned with Alembic and applied automatically at startup. Before release, run the same checks enforced in CI:
+
+```bash
+pip install -e .[dev]
+python -m ruff check .
+python -m mypy lobesync
+python -m pytest
+python -m build
+```
+
+Back up the SQLite database before upgrades. The application records each executed tool's arguments and result with the assistant message for traceability.
 
 ## Tech stack
 
-- [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)
+- [LangChain](https://github.com/langchain-ai/langchain) (provider-agnostic LLM access)
 - [LangGraph](https://github.com/langchain-ai/langgraph)
 - [SQLModel](https://sqlmodel.tiangolo.com/)
 - [Rich](https://github.com/Textualize/rich)

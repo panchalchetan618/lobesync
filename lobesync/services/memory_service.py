@@ -1,17 +1,18 @@
-from sqlmodel import Session
 import logging
 
+from sqlmodel import Session
+
+from lobesync.db.models import MEMORY_TYPE
 from lobesync.db.repos.memory_repo import (
     create_memory,
+    delete_memory,
     get_all_memories,
-    get_memory_by_id,
-    get_memories_by_type,
     get_memories_by_key,
     get_memories_by_matching_key_or_content,
+    get_memories_by_type,
+    get_memory_by_id,
     update_memory,
-    delete_memory,
 )
-from lobesync.db.models import MEMORY_TYPE
 from lobesync.exceptions.memory_exceptions import MemoryNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,10 @@ def upsert_memory_service(session: Session, key: str, content: str, memory_type:
     """
     existing = get_memories_by_key(session, key)
     if existing:
-        return update_memory(session, existing[0].id, content=content, memory_type=memory_type)
+        memory_id = existing[0].id
+        if memory_id is None:
+            raise RuntimeError("Persisted memory is missing an id")
+        return update_memory(session, memory_id, content=content, memory_type=memory_type)
     return create_memory(session, key, content, memory_type)
 
 
@@ -94,7 +98,12 @@ def search_memories_service(session: Session, query: str):
     return get_memories_by_matching_key_or_content(session, query)
 
 
-def update_memory_service(session: Session, memory_id: int, content: str | None = None, memory_type: MEMORY_TYPE | None = None):
+def update_memory_service(
+    session: Session,
+    memory_id: int,
+    content: str | None = None,
+    memory_type: MEMORY_TYPE | None = None,
+):
     """
     Updates a memory's content and/or type. Raises if not found.
 

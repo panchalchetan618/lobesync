@@ -1,14 +1,18 @@
-from sqlmodel import Session, select
-from sqlalchemy.exc import SQLAlchemyError
-from lobesync.db.models import CheckList, CheckListItem
-from typing import List
 import logging
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
+
+from lobesync.db.models import CheckList, CheckListItem
 
 logger = logging.getLogger(__name__)
 
 
-def create_checklist(session: Session, title: str, description: str | None = None) -> CheckList | None:
+def create_checklist(
+    session: Session, title: str, description: str | None = None
+) -> CheckList | None:
     """
     Creates and persists a new checklist.
 
@@ -31,7 +35,7 @@ def create_checklist(session: Session, title: str, description: str | None = Non
         return None
 
 
-def get_all_checklists(session: Session) -> List[CheckList] | None:
+def get_all_checklists(session: Session) -> Sequence[CheckList] | None:
     """
     Retrieves all checklists.
 
@@ -67,7 +71,9 @@ def get_checklist_by_id(session: Session, checklist_id: int) -> CheckList | None
         return None
 
 
-def update_checklist(session: Session, checklist_id: int, title: str | None = None, description: str | None = None) -> CheckList | None:
+def update_checklist(
+    session: Session, checklist_id: int, title: str | None = None, description: str | None = None
+) -> CheckList | None:
     """
     Updates title and/or description on an existing checklist. Only non-None arguments are applied.
 
@@ -88,7 +94,7 @@ def update_checklist(session: Session, checklist_id: int, title: str | None = No
             checklist.title = title
         if description is not None:
             checklist.description = description
-        checklist.updated_at = datetime.now()
+        checklist.updated_at = datetime.now(UTC)
         session.add(checklist)
         session.flush()
         session.refresh(checklist)
@@ -121,7 +127,9 @@ def delete_checklist(session: Session, checklist_id: int) -> bool:
         return False
 
 
-def create_checklist_item(session: Session, checklist_id: int, title: str, description: str | None = None) -> CheckListItem | None:
+def create_checklist_item(
+    session: Session, checklist_id: int, title: str, description: str | None = None
+) -> CheckListItem | None:
     """
     Creates and persists a checklist item under a given checklist.
 
@@ -145,7 +153,7 @@ def create_checklist_item(session: Session, checklist_id: int, title: str, descr
         return None
 
 
-def get_items_by_checklist(session: Session, checklist_id: int) -> List[CheckListItem] | None:
+def get_items_by_checklist(session: Session, checklist_id: int) -> Sequence[CheckListItem] | None:
     """
     Retrieves all items belonging to a checklist.
 
@@ -157,7 +165,9 @@ def get_items_by_checklist(session: Session, checklist_id: int) -> List[CheckLis
         List[CheckListItem] | None: Items for that checklist if any, otherwise None.
     """
     try:
-        items = session.exec(select(CheckListItem).where(CheckListItem.checklist_id == checklist_id)).all()
+        items = session.exec(
+            select(CheckListItem).where(CheckListItem.checklist_id == checklist_id)
+        ).all()
         return items or None
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_items_by_checklist] Failed. Error: {e}")
@@ -180,7 +190,7 @@ def toggle_checklist_item(session: Session, item_id: int) -> CheckListItem | Non
         if not item:
             return None
         item.is_checked = not item.is_checked
-        item.updated_at = datetime.now()
+        item.updated_at = datetime.now(UTC)
         session.add(item)
         session.flush()
         session.refresh(item)

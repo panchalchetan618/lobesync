@@ -1,20 +1,21 @@
-import anthropic
 import json
 import logging
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from langchain_core.messages import HumanMessage
 from sqlmodel import Session
 
-from lobesync.config import config
-from lobesync.db.database import engine
-from lobesync.db.models import MessageRole
+from lobesync.agent.models import get_chat_model
+from lobesync.agent.state import AgentState
+from lobesync.db.database import get_engine
+from lobesync.db.models import Message, MessageRole
 from lobesync.db.repos.chat_repo import (
     create_message,
     create_tool_call,
-    get_messages_by_session,
-    update_chat_session_summary,
     get_chat_session_by_id,
+    get_messages_by_session,
 )
-from lobesync.agent.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -22,32 +23,65 @@ _SUMMARY_EVERY = 5
 _KEEP_LAST = 5
 
 
-def _generate_summary(existing_summary: str | None, messages_to_compress: list) -> str:
-    formatted = "\n".join([
-        f"{msg.role.value.upper()}: {msg.content}"
-        for msg in messages_to_compress
-    ])
+def _generate_summary(
+    existing_summary: str | None, messages_to_compress: Sequence[Message]
+) -> str:
+    formatted = "\n".join(
+        [f"{msg.role.value.upper()}: {msg.content}" for msg in messages_to_compress]
+    )
 
     if existing_summary:
         prompt = f"Previous summary:\n{existing_summary}\n\nNew exchanges to incorporate:\n{formatted}\n\nUpdate the summary concisely."
     else:
         prompt = f"Summarize this conversation concisely:\n{formatted}"
 
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text
+    model = get_chat_model(max_tokens=512)
+    response = model.invoke([HumanMessage(content=prompt)])
+    return str(response.content)
 
 
-def _update_session_name(session: Session, chat_session_id: int, first_user_message: str):
+def _update_session_name(session: Session, chat_session_id: int, first_user_message: str) -> None:
     from lobesync.db.models import ChatSession
+
     chat_session = session.get(ChatSession, chat_session_id)
     if chat_session and chat_session.name == "Lobesync":
         chat_session.name = first_user_message[:40].strip()
         session.add(chat_session)
+
+
+def _update_summary(chat_session_id: int) -> None:
+    """Summarize only messages that have not already been summarized.
+
+    The model call deliberately happens outside a database transaction so a
+    slow provider cannot hold a write lock on the user's data.
+    """
+    with Session(get_engine()) as session:
+        chat_session = get_chat_session_by_id(session, chat_session_id)
+        messages = get_messages_by_session(session, chat_session_id) or []
+        if not chat_session:
+            return
+
+        total = len(messages)
+        end = total - _KEEP_LAST
+        start = chat_session.summary_message_count
+        if end <= start or total % _SUMMARY_EVERY != 0:
+            return
+
+        existing_summary = chat_session.summary
+        messages_to_compress = messages[start:end]
+
+    logger.info("Regenerating summary for %s message(s)", len(messages_to_compress))
+    new_summary = _generate_summary(existing_summary, messages_to_compress)
+
+    with Session(get_engine()) as session:
+        chat_session = get_chat_session_by_id(session, chat_session_id)
+        if not chat_session:
+            return
+        chat_session.summary = new_summary
+        chat_session.summary_message_count = end
+        chat_session.updated_at = datetime.now(UTC)
+        session.add(chat_session)
+        session.commit()
 
 
 def commitment_node(state: AgentState) -> dict:
@@ -57,13 +91,13 @@ def commitment_node(state: AgentState) -> dict:
     """
     chat_session_id = state["chat_session_id"]
     user_query = state["user_query"]
-    final_response = state["final_response"]
+    final_response = state["final_response"] or "No response was generated."
     input_tokens = state.get("input_tokens", 0)
     output_tokens = state.get("output_tokens", 0)
     model_name = state.get("model_name")
     execution_results = state.get("execution_results") or []
 
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         create_message(session, chat_session_id, user_query, MessageRole.USER)
         assistant_msg = create_message(
             session,
@@ -78,12 +112,21 @@ def commitment_node(state: AgentState) -> dict:
 
         # Save tool calls linked to the assistant message
         if execution_results and assistant_msg:
+            if assistant_msg.id is None:
+                raise RuntimeError("Persisted assistant message is missing an id")
+
             def _safe_json(obj) -> str:
-                return json.dumps(obj, default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o))
+                return json.dumps(
+                    obj, default=lambda o: o.isoformat() if isinstance(o, datetime) else str(o)
+                )
 
             for r in execution_results:
                 payload = _safe_json(r.get("args", {}))
-                response = _safe_json(r["result"]) if r.get("result") is not None else (r.get("error") or "")
+                response = (
+                    _safe_json(r["result"])
+                    if r.get("result") is not None
+                    else (r.get("error") or "")
+                )
                 create_tool_call(
                     session,
                     message_id=assistant_msg.id,
@@ -98,15 +141,9 @@ def commitment_node(state: AgentState) -> dict:
         if total <= 2:
             _update_session_name(session, chat_session_id, user_query)
 
-        if total > _KEEP_LAST and total % _SUMMARY_EVERY == 0:
-            messages_to_compress = all_messages[:-_KEEP_LAST]
-            chat_session = get_chat_session_by_id(session, chat_session_id)
-            existing_summary = chat_session.summary if chat_session else None
-            logger.info(f"Regenerating summary ({len(messages_to_compress)} messages to compress)")
-            new_summary = _generate_summary(existing_summary, messages_to_compress)
-            update_chat_session_summary(session, chat_session_id, new_summary)
-
         session.commit()
+
+    _update_summary(chat_session_id)
 
     logger.info(f"Commitment: saved turn for session {chat_session_id} ({total} total messages)")
     return {}

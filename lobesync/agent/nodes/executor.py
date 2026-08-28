@@ -1,9 +1,10 @@
 import logging
+
 from sqlmodel import Session
 
-from lobesync.db.database import engine
 from lobesync.agent.state import AgentState
 from lobesync.agent.tools import TOOL_REGISTRY
+from lobesync.db.database import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ def _resolve_args(args: dict, context: dict) -> dict:
             field = parts[1] if len(parts) > 1 else None
 
             if tool_name not in context:
-                raise ValueError(f"Cannot resolve '{value}': '{tool_name}' has not been executed yet in this group")
+                raise ValueError(
+                    f"Cannot resolve '{value}': '{tool_name}' has not been executed yet in this group"
+                )
 
             result = context[tool_name]
             if field is None:
@@ -51,6 +54,22 @@ def _resolve_args(args: dict, context: dict) -> dict:
     return resolved
 
 
+def _validate_step(step: object) -> tuple[str, str, dict]:
+    """Validate untrusted model output before invoking an application tool."""
+    if not isinstance(step, dict):
+        raise ValueError("Plan step must be an object")
+    tool_name = step.get("tool")
+    step_id = step.get("id", tool_name)
+    args = step.get("args", {})
+    if not isinstance(tool_name, str) or tool_name not in TOOL_REGISTRY:
+        raise ValueError(f"Unknown tool: {tool_name!r}")
+    if not isinstance(step_id, str) or not step_id:
+        raise ValueError("Plan step id must be a non-empty string")
+    if not isinstance(args, dict):
+        raise ValueError(f"Arguments for '{step_id}' must be an object")
+    return step_id, tool_name, args
+
+
 def executor_node(state: AgentState) -> dict:
     """
     Executes the plan produced by the planner.
@@ -63,27 +82,28 @@ def executor_node(state: AgentState) -> dict:
 
     for group_idx, group in enumerate(plan.get("atomic_groups", [])):
         group_results = []
-        with Session(engine) as session:
+        with Session(get_engine()) as session:
             atomic_context: dict = {}
             try:
                 for step in group:
-                    tool_name = step["tool"]
-                    args = step.get("args", {})
+                    step_id, tool_name, atomic_args = _validate_step(step)
+                    if step_id in atomic_context:
+                        raise ValueError(f"Duplicate step id in atomic group: '{step_id}'")
 
-                    if tool_name not in TOOL_REGISTRY:
-                        raise ValueError(f"Unknown tool: '{tool_name}'")
-
-                    resolved = _resolve_args(args, atomic_context)
+                    resolved = _resolve_args(atomic_args, atomic_context)
                     result = TOOL_REGISTRY[tool_name](session, **resolved)
                     serialized = _serialize_result(result)  # must happen before commit
-                    atomic_context[tool_name] = result
+                    atomic_context[step_id] = result
 
-                    group_results.append({
-                        "tool": tool_name,
-                        "args": args,
-                        "result": serialized,
-                        "error": None,
-                    })
+                    group_results.append(
+                        {
+                            "step_id": step_id,
+                            "tool": tool_name,
+                            "args": resolved,
+                            "result": serialized,
+                            "error": None,
+                        }
+                    )
 
                 session.commit()
                 execution_results.extend(group_results)
@@ -93,42 +113,52 @@ def executor_node(state: AgentState) -> dict:
                 session.rollback()
                 logger.error(f"Atomic group {group_idx} failed and rolled back: {e}")
                 for step in group:
-                    execution_results.append({
-                        "tool": step["tool"],
-                        "args": step.get("args", {}),
-                        "result": None,
-                        "error": str(e),
-                    })
+                    failed_step = step if isinstance(step, dict) else {}
+                    execution_results.append(
+                        {
+                            "step_id": failed_step.get("id", failed_step.get("tool", "unknown")),
+                            "tool": failed_step.get("tool", "unknown"),
+                            "args": failed_step.get("args", {}),
+                            "result": None,
+                            "error": str(e),
+                        }
+                    )
 
     for step in plan.get("non_atomic", []):
-        tool_name = step["tool"]
-        args = step.get("args", {})
-
-        with Session(engine) as session:
+        with Session(get_engine()) as session:
+            args: dict = {}
             try:
-                if tool_name not in TOOL_REGISTRY:
-                    raise ValueError(f"Unknown tool: '{tool_name}'")
+                step_id, tool_name, args = _validate_step(step)
 
                 result = TOOL_REGISTRY[tool_name](session, **args)
                 serialized = _serialize_result(result)  # must happen before commit
                 session.commit()
 
-                execution_results.append({
-                    "tool": tool_name,
-                    "args": args,
-                    "result": serialized,
-                    "error": None,
-                })
+                execution_results.append(
+                    {
+                        "step_id": step_id,
+                        "tool": tool_name,
+                        "args": args,
+                        "result": serialized,
+                        "error": None,
+                    }
+                )
                 logger.info(f"Non-atomic step '{tool_name}' committed")
 
             except Exception as e:
                 session.rollback()
+                tool_name = step.get("tool", "unknown") if isinstance(step, dict) else "unknown"
                 logger.error(f"Non-atomic step '{tool_name}' failed: {e}")
-                execution_results.append({
-                    "tool": tool_name,
-                    "args": args,
-                    "result": None,
-                    "error": str(e),
-                })
+                execution_results.append(
+                    {
+                        "step_id": step.get("id", tool_name)
+                        if isinstance(step, dict)
+                        else "unknown",
+                        "tool": tool_name,
+                        "args": args,
+                        "result": None,
+                        "error": str(e),
+                    }
+                )
 
     return {"execution_results": execution_results}

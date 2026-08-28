@@ -1,24 +1,32 @@
-from sqlmodel import Session
 import logging
 from datetime import datetime
 
+from sqlmodel import Session
+
+from lobesync.db.models import TaskStatus
 from lobesync.db.repos.task_repo import (
     create_task,
+    delete_task,
     get_all_tasks,
     get_task_by_id,
     get_task_by_title,
-    get_tasks_by_status,
     get_tasks_by_checklist,
+    get_tasks_by_status,
     update_task,
-    delete_task,
 )
-from lobesync.db.models import TaskStatus
 from lobesync.exceptions.task_exceptions import TaskNotFoundError
 
 logger = logging.getLogger(__name__)
 
 
-def create_task_service(session: Session, title: str, description: str | None = None, status: TaskStatus = TaskStatus.PENDING, checklist_id: int | None = None, deadline: datetime | None = None):
+def create_task_service(
+    session: Session,
+    title: str,
+    description: str | None = None,
+    status: TaskStatus = TaskStatus.PENDING,
+    checklist_id: int | None = None,
+    deadline: datetime | None = None,
+):
     """
     Creates a new task.
 
@@ -116,7 +124,14 @@ def get_tasks_by_checklist_service(session: Session, checklist_id: int):
     return get_tasks_by_checklist(session, checklist_id)
 
 
-def update_task_service(session: Session, task_id: int, title: str | None = None, description: str | None = None, status: TaskStatus | None = None, deadline: datetime | None = None):
+def update_task_service(
+    session: Session,
+    task_id: int,
+    title: str | None = None,
+    description: str | None = None,
+    status: TaskStatus | None = None,
+    deadline: datetime | None = None,
+):
     """
     Updates a task's fields. Raises if not found.
 
