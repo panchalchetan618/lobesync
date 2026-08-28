@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+from alembic import context
 from sqlmodel import SQLModel
 
 import lobesync.db.models  # noqa: F401
-from alembic import context
 from lobesync.config import config as app_config
 
 alembic_config = context.config

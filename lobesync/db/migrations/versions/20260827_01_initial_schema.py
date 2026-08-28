@@ -1,10 +1,10 @@
 """Create the initial Lobesync schema and upgrade the pre-migration schema."""
 
 import sqlalchemy as sa
+from alembic import op
 from sqlmodel import SQLModel
 
 import lobesync.db.models  # noqa: F401
-from alembic import op
 
 revision = "20260827_01"
 down_revision = None

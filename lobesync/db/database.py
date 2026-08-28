@@ -2,12 +2,12 @@ import logging
 from collections.abc import Generator
 from pathlib import Path
 
+from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
-from alembic import command
 from lobesync.config import config
 
 logger = logging.getLogger(__name__)
