@@ -1,6 +1,6 @@
 # Lobesync
 
-A personal AI assistant for your terminal. Manage tasks, notes, memories, and checklists through natural conversation — powered by Claude and built on LangGraph.
+A personal AI assistant for your terminal. Manage tasks, notes, memories, and checklists through natural conversation — powered by your chosen LLM provider and built on LangGraph.
 
 ```
 Lobesync — Personal AI Assistant
@@ -20,11 +20,11 @@ Lobesync: Updated "Write tests" to in progress. ✓
 - **Tasks** with deadlines, statuses, and checklist grouping
 - **Checklists** with items and pending-task guards
 - **Notes** for storing anything
-- **Memories** — the agent proactively remembers personal facts about you across sessions
+- **Optional memories** — cross-session retention is disabled by default and requires your consent
 - **Session management** — multiple conversations, each with its own history and incremental summary
-- **Streaming responses** with live Markdown rendering
+- **Streaming responses** with live Markdown rendering when supported by the provider
 - **Cost-efficient** — one LLM planning call per turn; execution and result rendering are local
-- **Local SQLite** by default — your data stays on your machine
+- **Local SQLite only** — the open-source edition keeps application data on your machine
 
 ## Architecture
 
@@ -44,12 +44,14 @@ user input
 └──────────┘                              └────────────────┘
 ```
 
-- **Planner** — single LLM call (Haiku). Streams a direct response for chat, or calls `make_plan` for data operations. Receives user memories in system prompt (cached) + session summary + last 5 messages.
+- **Planner** — a single LLM call that streams a direct response when the provider supports it, or calls `make_plan` for data operations. Receives explicitly marked untrusted memory context, a session summary, and the last 5 messages.
 - **Executor** — runs the plan. Atomic groups use one session (all-or-nothing). Independent steps run in separate sessions.
 - **Completion** — deterministically renders verified tool results, including item IDs.
 - **Commitment** — saves user messages, assistant messages, and tool calls to DB. Incrementally summarizes only unsummarized history every 5 messages.
 
 ## Installation
+
+Lobesync currently supports Python 3.12 and 3.13. Python 3.14 support is deferred until its LangChain dependencies support it without compatibility warnings.
 
 ### Using pipx (recommended for CLI tools)
 
@@ -75,10 +77,10 @@ pip install -e .
 
 Run `lobesync` for the first time and the setup wizard will guide you through:
 
-1. Choosing an LLM provider (Anthropic, OpenAI, Google, Groq, Mistral, or local Ollama) and entering its model name and API key
-2. Choosing a local SQLite database (recommended) or providing your own database URL
+1. Choosing Anthropic, OpenAI, Google, or a custom OpenAI-compatible provider, then entering its model name and API key when required
+2. Choosing whether to enable cross-session memory (disabled by default)
 
-Config is saved to `~/.lobesync/config.json`. Local database is stored at `~/.lobesync/lobesync.db`.
+Config is saved to `~/.lobesync/config.json`. API keys are stored in your operating system credential store. Existing plaintext keys from older Lobesync versions are migrated automatically and removed from the config file only after that migration succeeds. The local database is stored at `~/.lobesync/lobesync.db`.
 
 Only providers whose LangChain package is installed appear in the wizard. To enable another provider, install its package first, e.g. `pip install langchain-openai`, then run setup again.
 
@@ -96,6 +98,10 @@ lobesync
 | `/session new` | Start a new session |
 | `/session new <name>` | Start a new named session |
 | `/session <id>` | Switch to an existing session |
+| `/memory` | Show whether cross-session memory is enabled |
+| `/memory on` | Enable cross-session memory |
+| `/memory off` | Disable cross-session memory without deleting existing local memories |
+| `/configure` | Change provider, model, API key, or custom OpenAI-compatible endpoint |
 | `/help` | Show all commands |
 | `exit` | Quit |
 
@@ -110,25 +116,36 @@ You: Mark the PR review task as done
 You: Start a new checklist for the Q2 release
 ```
 
-The agent remembers personal facts across sessions — tell it your preferences, goals, or anything relevant and it will factor them in automatically.
+When cross-session memory is enabled, ask the assistant explicitly to remember information. You can disable it at any time with `/memory off`.
+
+When an action would delete multiple items, Lobesync shows the selected targets and asks for an immediate Yes/No decision. The safe default is No; use the arrow keys and Enter in supported terminals.
 
 ## Configuration
 
 | Variable | Description |
 |---|---|
-| `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `DATABASE_URL` | SQLAlchemy database URL (default: local SQLite) |
+| `LLM_API_KEY` | Optional environment-variable fallback for your provider API key |
+| `LLM_BASE_URL` | Base URL for the custom OpenAI-compatible provider |
+| `DATABASE_URL` | Local SQLite database URL |
 
 Set via the setup wizard or in `~/.lobesync/config.json`:
 
 ```json
 {
-  "ANTHROPIC_API_KEY": "sk-ant-...",
+  "LLM_PROVIDER": "anthropic",
+  "LLM_MODEL": "claude-haiku-4-5-20251001",
+  "MEMORY_ENABLED": false,
   "DATABASE_URL": "sqlite:////home/you/.lobesync/lobesync.db"
 }
 ```
 
-You can also use a `.env` file in the working directory or environment variables as fallback.
+The open-source edition supports local SQLite storage only. Remote storage, organization controls, and hosted integrations are planned for Lobesync Enterprise. You can also use a `.env` file in the working directory or environment variables as a non-persistent API-key fallback.
+
+Custom providers must expose an OpenAI-compatible API. Use HTTPS for hosted endpoints; HTTP is accepted only for localhost endpoints. A custom endpoint receives the prompt context needed to answer requests. API keys are optional for custom providers so local keyless servers work too.
+
+## Privacy
+
+Lobesync stores conversations, tool-call records, notes, tasks, and optional memories in the local SQLite database. SQLite data is plaintext, so protect your device and backups with operating-system access controls or disk encryption. API keys are kept in the operating system credential store rather than the config file; environment variables remain an optional non-persistent fallback. The configured LLM provider receives the prompt context needed to answer a request; use a local provider such as Ollama when you need inference to stay on-device.
 
 ## Model
 
@@ -146,7 +163,7 @@ python -m pytest
 python -m build
 ```
 
-Back up the SQLite database before upgrades. The application records each executed tool's arguments and result with the assistant message for traceability.
+Back up the SQLite database before upgrades. The application records each executed tool's arguments and result with the assistant message for traceability. If a request fails after beginning independent operations, some operations may already have completed; review the displayed results and your data before retrying.
 
 ## Tech stack
 

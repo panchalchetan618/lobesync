@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class AgentState(TypedDict):
@@ -12,3 +12,5 @@ class AgentState(TypedDict):
     output_tokens: int
     model_name: str | None
     error: str | None
+    approved_bulk_plan: NotRequired[dict | None]
+    bulk_delete_confirmation_required: NotRequired[bool]

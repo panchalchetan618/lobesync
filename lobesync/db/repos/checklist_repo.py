@@ -32,7 +32,7 @@ def create_checklist(
         return checklist
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_checklist] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_all_checklists(session: Session) -> Sequence[CheckList] | None:
@@ -47,10 +47,10 @@ def get_all_checklists(session: Session) -> Sequence[CheckList] | None:
     """
     try:
         checklists = session.exec(select(CheckList)).all()
-        return checklists or None
+        return checklists
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_all_checklists] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_checklist_by_id(session: Session, checklist_id: int) -> CheckList | None:
@@ -68,7 +68,7 @@ def get_checklist_by_id(session: Session, checklist_id: int) -> CheckList | None
         return session.get(CheckList, checklist_id)
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_checklist_by_id] Failed. Error: {e}")
-        return None
+        raise
 
 
 def update_checklist(
@@ -101,7 +101,7 @@ def update_checklist(
         return checklist
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) update_checklist] Failed. Error: {e}")
-        return None
+        raise
 
 
 def delete_checklist(session: Session, checklist_id: int) -> bool:
@@ -124,7 +124,7 @@ def delete_checklist(session: Session, checklist_id: int) -> bool:
         return True
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) delete_checklist] Failed. Error: {e}")
-        return False
+        raise
 
 
 def create_checklist_item(
@@ -150,7 +150,7 @@ def create_checklist_item(
         return item
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_checklist_item] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_items_by_checklist(session: Session, checklist_id: int) -> Sequence[CheckListItem] | None:
@@ -168,10 +168,10 @@ def get_items_by_checklist(session: Session, checklist_id: int) -> Sequence[Chec
         items = session.exec(
             select(CheckListItem).where(CheckListItem.checklist_id == checklist_id)
         ).all()
-        return items or None
+        return items
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_items_by_checklist] Failed. Error: {e}")
-        return None
+        raise
 
 
 def toggle_checklist_item(session: Session, item_id: int) -> CheckListItem | None:
@@ -197,7 +197,7 @@ def toggle_checklist_item(session: Session, item_id: int) -> CheckListItem | Non
         return item
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) toggle_checklist_item] Failed. Error: {e}")
-        return None
+        raise
 
 
 def delete_checklist_item(session: Session, item_id: int) -> bool:
@@ -220,4 +220,4 @@ def delete_checklist_item(session: Session, item_id: int) -> bool:
         return True
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) delete_checklist_item] Failed. Error: {e}")
-        return False
+        raise

@@ -45,7 +45,7 @@ def create_task(
         return task
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_task] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_all_tasks(session: Session) -> Sequence[Task] | None:
@@ -60,10 +60,10 @@ def get_all_tasks(session: Session) -> Sequence[Task] | None:
     """
     try:
         tasks = session.exec(select(Task)).all()
-        return tasks or None
+        return tasks
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_all_tasks] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_task_by_title(session: Session, title: str) -> Task | None:
@@ -83,7 +83,7 @@ def get_task_by_title(session: Session, title: str) -> Task | None:
         ).first()
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_task_by_title] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_task_by_id(session: Session, task_id: int) -> Task | None:
@@ -101,7 +101,7 @@ def get_task_by_id(session: Session, task_id: int) -> Task | None:
         return session.get(Task, task_id)
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_task_by_id] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_tasks_by_status(session: Session, status: TaskStatus) -> Sequence[Task] | None:
@@ -117,10 +117,10 @@ def get_tasks_by_status(session: Session, status: TaskStatus) -> Sequence[Task] 
     """
     try:
         tasks = session.exec(select(Task).where(Task.status == status)).all()
-        return tasks or None
+        return tasks
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tasks_by_status] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_tasks_by_checklist(session: Session, checklist_id: int) -> Sequence[Task] | None:
@@ -136,10 +136,10 @@ def get_tasks_by_checklist(session: Session, checklist_id: int) -> Sequence[Task
     """
     try:
         tasks = session.exec(select(Task).where(Task.checklist_id == checklist_id)).all()
-        return tasks or None
+        return tasks
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tasks_by_checklist] Failed. Error: {e}")
-        return None
+        raise
 
 
 def update_task(
@@ -187,7 +187,7 @@ def update_task(
 
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) update_task] Failed. Error: {e}")
-        return None
+        raise
 
 
 def delete_task(session: Session, task_id: int) -> bool:
@@ -212,4 +212,4 @@ def delete_task(session: Session, task_id: int) -> bool:
 
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) delete_task] Failed. Error: {e}")
-        return False
+        raise

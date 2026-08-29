@@ -143,7 +143,10 @@ def commitment_node(state: AgentState) -> dict:
 
         session.commit()
 
-    _update_summary(chat_session_id)
+    try:
+        _update_summary(chat_session_id)
+    except Exception:
+        logger.warning("Could not update conversation summary; it will be retried later", exc_info=True)
 
-    logger.info(f"Commitment: saved turn for session {chat_session_id} ({total} total messages)")
+    logger.info("Commitment: saved turn for session %s (%s total messages)", chat_session_id, total)
     return {}

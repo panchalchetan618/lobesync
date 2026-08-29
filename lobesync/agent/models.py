@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
 
@@ -21,14 +20,9 @@ class Provider:
     max_tokens_kwarg: str = "max_tokens"
     default_model: str = ""
     supports_prompt_caching: bool = False
-    extra_kwargs: dict = field(default_factory=dict)
-
-    @property
-    def installed(self) -> bool:
-        try:
-            return importlib.util.find_spec(self.package) is not None
-        except (ImportError, ValueError):
-            return False
+    supports_custom_base_url: bool = False
+    api_key_optional: bool = False
+    supports_streaming: bool = True
 
 
 PROVIDERS: dict[str, Provider] = {
@@ -58,30 +52,16 @@ PROVIDERS: dict[str, Provider] = {
         max_tokens_kwarg="max_output_tokens",
         default_model="gemini-2.5-flash",
     ),
-    "groq": Provider(
-        id="groq",
-        label="Groq (fast inference)",
-        package="langchain_groq",
-        chat_class="langchain_groq.ChatGroq",
-        key_kwarg="groq_api_key",
-        default_model="llama-3.3-70b-versatile",
-    ),
-    "mistral": Provider(
-        id="mistral",
-        label="Mistral AI",
-        package="langchain_mistralai",
-        chat_class="langchain_mistralai.ChatMistralAI",
-        key_kwarg="mistral_api_key",
-        default_model="mistral-small-latest",
-    ),
-    "ollama": Provider(
-        id="ollama",
-        label="Ollama (local)",
-        package="langchain_ollama",
-        chat_class="langchain_ollama.ChatOllama",
-        key_kwarg=None,
-        max_tokens_kwarg="num_predict",
-        default_model="llama3.1",
+    "custom": Provider(
+        id="custom",
+        label="Custom (OpenAI-compatible)",
+        package="langchain_openai",
+        chat_class="langchain_openai.ChatOpenAI",
+        key_kwarg="api_key",
+        default_model="gpt-4o-mini",
+        supports_custom_base_url=True,
+        api_key_optional=True,
+        supports_streaming=False,
     ),
 }
 
@@ -110,8 +90,17 @@ def get_chat_model(max_tokens: int | None = None) -> BaseChatModel:
     kwargs: dict = {"model": config.LLM_MODEL}
     kwargs[provider.max_tokens_kwarg] = max_tokens or MAX_TOKENS
     if provider.key_kwarg:
-        kwargs[provider.key_kwarg] = config.LLM_API_KEY
-    kwargs.update(provider.extra_kwargs)
+        api_key = config.LLM_API_KEY
+        if api_key:
+            kwargs[provider.key_kwarg] = api_key
+        elif provider.api_key_optional:
+            # The OpenAI client requires a value even when a local endpoint does not authenticate.
+            kwargs[provider.key_kwarg] = "not-needed"
+    if provider.supports_custom_base_url:
+        base_url = config.LLM_BASE_URL
+        if not base_url:
+            raise ValueError("A base URL is required for the custom OpenAI-compatible provider")
+        kwargs["base_url"] = base_url
     return cls(**kwargs)
 
 
@@ -121,3 +110,7 @@ def get_model_name() -> str:
 
 def use_prompt_caching() -> bool:
     return _resolve_provider(config.LLM_PROVIDER).supports_prompt_caching
+
+
+def use_streaming() -> bool:
+    return _resolve_provider(config.LLM_PROVIDER).supports_streaming

@@ -33,7 +33,7 @@ def create_note(
         return note
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_note] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_all_notes(session: Session) -> Sequence[Note] | None:
@@ -48,10 +48,10 @@ def get_all_notes(session: Session) -> Sequence[Note] | None:
     """
     try:
         notes = session.exec(select(Note)).all()
-        return notes or None
+        return notes
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_all_notes] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_note_by_id(session: Session, note_id: int) -> Note | None:
@@ -69,7 +69,7 @@ def get_note_by_id(session: Session, note_id: int) -> Note | None:
         return session.get(Note, note_id)
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_note_by_id] Failed. Error: {e}")
-        return None
+        raise
 
 
 def update_note(
@@ -102,7 +102,7 @@ def update_note(
         return note
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) update_note] Failed. Error: {e}")
-        return None
+        raise
 
 
 def delete_note(session: Session, note_id: int) -> bool:
@@ -125,4 +125,4 @@ def delete_note(session: Session, note_id: int) -> bool:
         return True
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) delete_note] Failed. Error: {e}")
-        return False
+        raise
