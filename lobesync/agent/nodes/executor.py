@@ -9,6 +9,31 @@ from lobesync.db.database import get_engine
 logger = logging.getLogger(__name__)
 
 
+def _requires_bulk_delete_confirmation(plan: dict) -> bool:
+    delete_count = 0
+    for group in plan.get("atomic_groups", []):
+        if isinstance(group, list):
+            delete_count += sum(
+                1
+                for step in group
+                if isinstance(step, dict) and str(step.get("tool", "")).startswith("delete_")
+            )
+    delete_count += sum(
+        1
+        for step in plan.get("non_atomic", [])
+        if isinstance(step, dict) and str(step.get("tool", "")).startswith("delete_")
+    )
+    return delete_count > 1
+
+
+def _require_authoritative_result(tool_name: str, result: object) -> None:
+    """Reject write operations that did not return a verified result."""
+    if tool_name.startswith(("create_", "update_", "upsert_", "toggle_")) and result is None:
+        raise RuntimeError(f"{tool_name} did not return a result")
+    if tool_name.startswith("delete_") and result is not True:
+        raise RuntimeError(f"{tool_name} was not completed")
+
+
 def _serialize_result(result) -> dict | list | bool | str | None:
     """Convert SQLModel objects to plain dicts for storage in state."""
     if result is None or isinstance(result, bool):
@@ -78,6 +103,32 @@ def executor_node(state: AgentState) -> dict:
     - non_atomic: each step runs in its own session. Failures are isolated.
     """
     plan = state["plan"] or {}
+    if not isinstance(plan, dict):
+        return {
+            "execution_results": [
+                {
+                    "step_id": "plan",
+                    "tool": "plan",
+                    "args": {},
+                    "result": None,
+                    "error": "Plan must be an object",
+                }
+            ]
+        }
+
+    if _requires_bulk_delete_confirmation(plan) and not state.get("approved_bulk_plan"):
+        return {
+            "execution_results": [
+                {
+                    "step_id": "bulk_delete",
+                    "tool": "bulk_delete",
+                    "args": {},
+                    "result": None,
+                    "error": "Confirmation required. Choose Yes to delete all selected items.",
+                }
+            ],
+            "bulk_delete_confirmation_required": True,
+        }
     execution_results: list[dict] = []
 
     for group_idx, group in enumerate(plan.get("atomic_groups", [])):
@@ -92,6 +143,7 @@ def executor_node(state: AgentState) -> dict:
 
                     resolved = _resolve_args(atomic_args, atomic_context)
                     result = TOOL_REGISTRY[tool_name](session, **resolved)
+                    _require_authoritative_result(tool_name, result)
                     serialized = _serialize_result(result)  # must happen before commit
                     atomic_context[step_id] = result
 
@@ -131,6 +183,7 @@ def executor_node(state: AgentState) -> dict:
                 step_id, tool_name, args = _validate_step(step)
 
                 result = TOOL_REGISTRY[tool_name](session, **args)
+                _require_authoritative_result(tool_name, result)
                 serialized = _serialize_result(result)  # must happen before commit
                 session.commit()
 

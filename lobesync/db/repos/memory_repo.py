@@ -31,7 +31,7 @@ def create_memory(session: Session, key: str, content: str, type: MEMORY_TYPE) -
         return memory
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_memory] Failed to create memory. Error: {e}")
-        return None
+        raise
 
 
 def get_all_memories(session: Session) -> Sequence[Memory] | None:
@@ -46,13 +46,10 @@ def get_all_memories(session: Session) -> Sequence[Memory] | None:
     """
     try:
         memories = session.exec(select(Memory)).all()
-        if not memories:
-            return None
-
         return memories
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_all_memories] Failed to get all memories. Error: {e}")
-        return None
+        raise
 
 
 def get_memories_by_matching_key_or_content(
@@ -82,15 +79,12 @@ def get_memories_by_matching_key_or_content(
                 )
             )
         ).all()
-        if not memories:
-            return None
-
         return memories
     except SQLAlchemyError as e:
         logger.error(
             f"[(REPO) get_memories_by_matching_key_or_content] Failed to get matching key memories. Error: {e}"
         )
-        return None
+        raise
 
 
 def get_memory_by_id(session: Session, id: int) -> Memory | None:
@@ -109,7 +103,7 @@ def get_memory_by_id(session: Session, id: int) -> Memory | None:
         return memory
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_memory_by_id] Failed to get memory by id. Error: {e}")
-        return None
+        raise
 
 
 def get_memories_by_type(session: Session, memory_type: MEMORY_TYPE) -> Sequence[Memory] | None:
@@ -125,12 +119,10 @@ def get_memories_by_type(session: Session, memory_type: MEMORY_TYPE) -> Sequence
     """
     try:
         memories = session.exec(select(Memory).where(Memory.memory_type == memory_type)).all()
-        if not memories:
-            return None
         return memories
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_memories_by_type] Failed to get memories by type. Error: {e}")
-        return None
+        raise
 
 
 def get_memories_by_key(session: Session, key: str) -> Sequence[Memory] | None:
@@ -146,12 +138,10 @@ def get_memories_by_key(session: Session, key: str) -> Sequence[Memory] | None:
     """
     try:
         memories = session.exec(select(Memory).where(Memory.key == key)).all()
-        if not memories:
-            return None
         return memories
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_memories_by_key] Failed to get memories by key. Error: {e}")
-        return None
+        raise
 
 
 def update_memory(
@@ -184,7 +174,7 @@ def update_memory(
         return memory
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) update_memory] Failed to update memory. Error: {e}")
-        return None
+        raise
 
 
 def delete_memory(session: Session, id: int) -> bool:
@@ -207,4 +197,4 @@ def delete_memory(session: Session, id: int) -> bool:
         return True
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) delete_memory] Failed to delete memory. Error: {e}")
-        return False
+        raise

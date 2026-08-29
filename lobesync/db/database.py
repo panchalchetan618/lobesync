@@ -1,12 +1,10 @@
 import logging
-from collections.abc import Generator
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlmodel import Session
 
 from lobesync.config import config
 
@@ -26,6 +24,11 @@ def get_engine() -> Engine:
     database_url = config.DATABASE_URL
     if not database_url:
         raise RuntimeError("DATABASE_URL is not configured")
+    if not database_url.startswith("sqlite"):
+        raise RuntimeError(
+            "The open-source edition stores data locally and supports SQLite databases only. "
+            "Remote storage is available in Lobesync Enterprise."
+        )
 
     if _engine is None or _engine_url != database_url:
         _engine = create_engine(database_url)
@@ -46,6 +49,11 @@ def init_db() -> None:
     database_url = config.DATABASE_URL
     if not database_url:
         raise RuntimeError("DATABASE_URL is not configured")
+    if not database_url.startswith("sqlite"):
+        raise RuntimeError(
+            "The open-source edition stores data locally and supports SQLite databases only. "
+            "Remote storage is available in Lobesync Enterprise."
+        )
 
     logger.info("Applying database migrations")
     alembic_config = AlembicConfig()
@@ -53,11 +61,3 @@ def init_db() -> None:
     alembic_config.set_main_option("sqlalchemy.url", database_url)
     command.upgrade(alembic_config, "head")
     logger.info("Database migrations complete")
-
-
-def get_db() -> Generator[Session, None, None]:
-    db: Session = Session(get_engine())
-    try:
-        yield db
-    finally:
-        db.close()

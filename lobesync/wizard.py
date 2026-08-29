@@ -1,15 +1,12 @@
 import json
-from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
-from rich.table import Table
 
-from lobesync.agent.models import PROVIDERS, Provider
-
-CONFIG_DIR = Path.home() / ".lobesync"
-CONFIG_FILE = CONFIG_DIR / "config.json"
+from lobesync.agent.models import Provider
+from lobesync.cli.prompts import prompt_openai_base_url, select_option, select_provider
+from lobesync.config import config_file_path, store_api_key, write_file_config
 
 console = Console()
 
@@ -23,37 +20,16 @@ BANNER = """
 """
 
 
-def _pick_provider() -> Provider:
-    available = [p for p in PROVIDERS.values() if p.installed]
-    missing = [p for p in PROVIDERS.values() if not p.installed]
-
-    if not available:
-        console.print("[red]No supported LLM provider packages are installed.[/red]")
-        raise SystemExit(1)
-
-    table = Table(title="LLM Providers", header_style="bold cyan")
-    table.add_column("#", style="dim", justify="right")
-    table.add_column("Provider")
-    table.add_column("Suggested model", style="dim")
-    for i, provider in enumerate(available, 1):
-        table.add_row(str(i), provider.label, provider.default_model)
-    console.print(table)
-
-    for provider in missing:
-        console.print(
-            f"[dim]• {provider.label}: install with 'pip install {provider.package}'[/dim]"
-        )
-
-    while True:
-        choice = Prompt.ask("[bold yellow]Select a provider[/bold yellow]", default="1")
-        if choice.isdigit() and 1 <= int(choice) <= len(available):
-            return available[int(choice) - 1]
-        console.print("[red]Invalid selection. Choose a number from the list.[/red]")
-
-
 def _pick_api_key(provider: Provider) -> str | None:
     if provider.key_kwarg is None:
         return None
+    if provider.api_key_optional:
+        choice = select_option(
+            "Authentication",
+            [("No API key", "none"), ("Enter an API key", "set")],
+        )
+        if choice != "set":
+            return None
     while True:
         api_key = Prompt.ask(
             f"[bold yellow]Enter your {provider.label} API key[/bold yellow]", password=True
@@ -64,25 +40,12 @@ def _pick_api_key(provider: Provider) -> str | None:
 
 
 def _pick_database() -> str:
-    use_local = Confirm.ask(
-        "[bold yellow]Use a local SQLite database?[/bold yellow] (recommended)", default=True
-    )
-    if use_local:
-        db_path = CONFIG_DIR / "lobesync.db"
-        console.print(f"[dim]Database will be stored at: {db_path}[/dim]")
-        return f"sqlite:///{db_path}"
-
-    return Prompt.ask(
-        "[bold yellow]Enter your database URL[/bold yellow] (e.g. sqlite:///path/to/db.sqlite3)"
-    )
+    db_path = config_file_path().with_name("lobesync.db")
+    console.print(f"[dim]Your data will be stored locally at: {db_path}[/dim]")
+    return f"sqlite:///{db_path}"
 
 
-def _save(config: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(json.dumps(config, indent=2))
-
-
-def _validate(provider: Provider, model: str) -> None:
+def _validate(provider: Provider) -> None:
     try:
         from lobesync.agent.models import get_chat_model
 
@@ -103,7 +66,9 @@ def run_wizard() -> dict:
     )
     console.print()
 
-    provider = _pick_provider()
+    provider = select_provider()
+    if provider is None:
+        raise SystemExit(1)
 
     console.print()
     model = Prompt.ask(
@@ -115,18 +80,36 @@ def run_wizard() -> dict:
     api_key = _pick_api_key(provider)
 
     console.print()
+    base_url = (
+        prompt_openai_base_url("http://localhost:11434/v1")
+        if provider.supports_custom_base_url
+        else None
+    )
+
+    console.print()
     db_url = _pick_database()
+
+    console.print()
+    memory_enabled = Confirm.ask(
+        "[bold yellow]Enable cross-session memory?[/bold yellow]", default=False
+    )
 
     new_config = {
         "LLM_PROVIDER": provider.id,
         "LLM_MODEL": model,
         "DATABASE_URL": db_url,
+        "MEMORY_ENABLED": memory_enabled,
     }
+    if base_url:
+        new_config["LLM_BASE_URL"] = base_url
+    write_file_config(new_config)
     if api_key:
-        new_config["LLM_API_KEY"] = api_key
+        store_api_key(provider.id, api_key)
 
-    _save(new_config)
-    _validate(provider, model)
+    from lobesync.config import config
+
+    config.reload()
+    _validate(provider)
 
     console.print()
     console.print(
@@ -134,7 +117,7 @@ def run_wizard() -> dict:
             f"[bold green]Setup complete![/bold green]\n"
             f"Provider: [cyan]{provider.label}[/cyan]\n"
             f"Model: [cyan]{model}[/cyan]\n"
-            f"Config saved to [cyan]{CONFIG_FILE}[/cyan]",
+            f"Config saved to [cyan]{config_file_path()}[/cyan]",
             border_style="green",
         )
     )
@@ -144,6 +127,7 @@ def run_wizard() -> dict:
 
 
 def load_config() -> dict | None:
-    if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text())
+    config_file = config_file_path()
+    if config_file.exists():
+        return json.loads(config_file.read_text(encoding="utf-8"))
     return None

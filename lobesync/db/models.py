@@ -14,6 +14,7 @@ class TaskStatus(StrEnum):
 class MessageRole(StrEnum):
     USER = "user"
     AGENT = "agent"
+    # Retained for compatibility with databases created by earlier releases.
     TOOL = "tool"
 
 

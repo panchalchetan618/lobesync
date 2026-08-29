@@ -18,22 +18,6 @@ from lobesync.exceptions.memory_exceptions import MemoryNotFoundError
 logger = logging.getLogger(__name__)
 
 
-def create_memory_service(session: Session, key: str, content: str, memory_type: MEMORY_TYPE):
-    """
-    Creates a new memory entry.
-
-    Args:
-        session (Session): Active database session.
-        key (str): Identifier for the memory.
-        content (str): Memory content.
-        memory_type (MEMORY_TYPE): Category of the memory.
-
-    Returns:
-        Memory | None: The created memory if successful, otherwise None.
-    """
-    return create_memory(session, key, content, memory_type)
-
-
 def upsert_memory_service(session: Session, key: str, content: str, memory_type: MEMORY_TYPE):
     """
     Updates an existing memory by key, or creates it if none exists.

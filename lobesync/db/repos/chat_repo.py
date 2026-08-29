@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
@@ -32,7 +31,7 @@ def create_chat_session(session: Session, name: str | None = None) -> ChatSessio
         return chat_session
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_chat_session] Failed. Error: {e}")
-        return None
+        raise
 
 
 def get_chat_session_by_id(session: Session, chat_session_id: int) -> ChatSession | None:
@@ -50,10 +49,10 @@ def get_chat_session_by_id(session: Session, chat_session_id: int) -> ChatSessio
         return session.get(ChatSession, chat_session_id)
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_chat_session_by_id] Failed. Error: {e}")
-        return None
+        raise
 
 
-def get_all_chat_sessions(session: Session) -> Sequence[ChatSession] | None:
+def get_all_chat_sessions(session: Session) -> Sequence[ChatSession]:
     """
     Retrieves all chat sessions.
 
@@ -61,43 +60,14 @@ def get_all_chat_sessions(session: Session) -> Sequence[ChatSession] | None:
         session (Session): Active database session used for querying.
 
     Returns:
-        List[ChatSession] | None: All sessions if any exist, otherwise None.
+        Sequence[ChatSession]: All sessions, which may be empty.
     """
     try:
         sessions = session.exec(select(ChatSession)).all()
-        return sessions or None
+        return sessions
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_all_chat_sessions] Failed. Error: {e}")
-        return None
-
-
-def update_chat_session_summary(
-    session: Session, chat_session_id: int, summary: str
-) -> ChatSession | None:
-    """
-    Updates the summary text and timestamp for a chat session.
-
-    Args:
-        session (Session): Active database session used for persistence.
-        chat_session_id (int): Primary key of the chat session.
-        summary (str): New summary content.
-
-    Returns:
-        ChatSession | None: The updated session, or None if not found or on failure.
-    """
-    try:
-        chat_session = session.get(ChatSession, chat_session_id)
-        if not chat_session:
-            return None
-        chat_session.summary = summary
-        chat_session.updated_at = datetime.now(UTC)
-        session.add(chat_session)
-        session.flush()
-        session.refresh(chat_session)
-        return chat_session
-    except SQLAlchemyError as e:
-        logger.error(f"[(REPO) update_chat_session_summary] Failed. Error: {e}")
-        return None
+        raise
 
 
 def create_message(
@@ -139,10 +109,10 @@ def create_message(
         return message
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_message] Failed. Error: {e}")
-        return None
+        raise
 
 
-def get_messages_by_session(session: Session, chat_session_id: int) -> Sequence[Message] | None:
+def get_messages_by_session(session: Session, chat_session_id: int) -> Sequence[Message]:
     """
     Retrieves all messages for a session, ordered by creation time (oldest first).
 
@@ -151,7 +121,7 @@ def get_messages_by_session(session: Session, chat_session_id: int) -> Sequence[
         chat_session_id (int): ID of the chat session.
 
     Returns:
-        List[Message] | None: Messages in that session if any, otherwise None.
+        Sequence[Message]: Messages in that session, which may be empty.
     """
     try:
         messages = session.exec(
@@ -159,10 +129,10 @@ def get_messages_by_session(session: Session, chat_session_id: int) -> Sequence[
             .where(Message.chat_session_id == chat_session_id)
             .order_by(Message.created_at)  # type: ignore[arg-type]
         ).all()
-        return messages or None
+        return messages
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_messages_by_session] Failed. Error: {e}")
-        return None
+        raise
 
 
 # --- ToolCall ---
@@ -197,10 +167,10 @@ def create_tool_call(
         return tool_call
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) create_tool_call] Failed. Error: {e}")
-        return None
+        raise
 
 
-def get_tool_calls_by_message(session: Session, message_id: int) -> Sequence[ToolCall] | None:
+def get_tool_calls_by_message(session: Session, message_id: int) -> Sequence[ToolCall]:
     """
     Retrieves all tool calls associated with a message.
 
@@ -209,11 +179,11 @@ def get_tool_calls_by_message(session: Session, message_id: int) -> Sequence[Too
         message_id (int): ID of the message.
 
     Returns:
-        List[ToolCall] | None: Tool calls for that message if any, otherwise None.
+        Sequence[ToolCall]: Tool calls for that message, which may be empty.
     """
     try:
         tool_calls = session.exec(select(ToolCall).where(ToolCall.message_id == message_id)).all()
-        return tool_calls or None
+        return tool_calls
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tool_calls_by_message] Failed. Error: {e}")
-        return None
+        raise
