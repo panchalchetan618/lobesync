@@ -53,10 +53,43 @@ user input
 
 Lobesync currently supports Python 3.12 and 3.13. Python 3.14 support is deferred until its LangChain dependencies support it without compatibility warnings.
 
-### Using pipx (recommended for CLI tools)
+### One-command install (recommended)
+
+The installers use `uv` to create an isolated environment with Python 3.13. If `uv` is missing, they install it from its official installer first. Review the versioned installer source before running it if you prefer not to execute a remote script. Every GitHub Release also includes a `SHA256SUMS` file for verifying downloaded assets.
 
 ```bash
-pipx install lobesync
+# macOS / Linux
+curl -fsSL https://github.com/panchalchetan618/lobesync/releases/latest/download/install.sh | sh
+```
+
+```powershell
+# Windows PowerShell
+irm https://github.com/panchalchetan618/lobesync/releases/latest/download/install.ps1 | iex
+```
+
+To install a specific release, set `LOBESYNC_VERSION` first. The `latest` URL always installs the latest PyPI release.
+
+```bash
+# macOS / Linux
+VERSION=1.0.1
+LOBESYNC_VERSION="$VERSION" curl -fsSL "https://github.com/panchalchetan618/lobesync/releases/download/v$VERSION/install.sh" | sh
+```
+
+```powershell
+# Windows PowerShell
+$version = "1.0.1"; $env:LOBESYNC_VERSION = $version; irm "https://github.com/panchalchetan618/lobesync/releases/download/v$version/install.ps1" | iex
+```
+
+### Using uv directly
+
+```bash
+uv tool install --python 3.13 lobesync
+```
+
+### Using pipx
+
+```bash
+pipx install --python 3.13 lobesync
 ```
 
 ### Using pip
