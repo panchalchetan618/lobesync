@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,13 +17,14 @@ from lobesync.agent.nodes.completion import completion_node
 from lobesync.agent.nodes.executor import executor_node
 from lobesync.agent.nodes.planner import _build_memory_context, planner_node
 from lobesync.agent.tools import TOOL_REGISTRY
-from lobesync.config import config, validate_openai_base_url
+from lobesync.config import Config, config, validate_openai_base_url
 from lobesync.db.database import get_engine, init_db
 from lobesync.db.models import ChatSession, Message, MessageRole, Task
 from lobesync.db.repos.chat_repo import create_message
 from lobesync.db.repos.checklist_repo import create_checklist
 from lobesync.db.repos.task_repo import get_all_tasks
 from lobesync.exceptions.checklist_exceptions import ChecklistHasPendingTasksError
+from lobesync.main import TURN_FAILURE_MESSAGE
 from lobesync.services.checklist_service import delete_checklist_service
 
 
@@ -163,6 +165,40 @@ class DatabaseTestCase(unittest.TestCase):
                 get_engine()
         finally:
             config._cache = {"DATABASE_URL": f"sqlite:///{self.database_path}"}
+
+    def test_legacy_plaintext_api_key_is_migrated_to_keyring(self) -> None:
+        config_path = Path(self.temp_dir.name) / "config.json"
+        config_path.write_text(
+            json.dumps({"LLM_PROVIDER": "openai", "LLM_API_KEY": "legacy-secret"}),
+            encoding="utf-8",
+        )
+
+        with (
+            patch("lobesync.config._CONFIG_FILE", config_path),
+            patch("lobesync.config.keyring.set_password") as set_password,
+        ):
+            migrated_config = Config()
+            self.assertEqual(migrated_config._load()["LLM_PROVIDER"], "openai")
+
+        set_password.assert_called_once_with("lobesync", "openai", "legacy-secret")
+        self.assertNotIn("LLM_API_KEY", json.loads(config_path.read_text(encoding="utf-8")))
+
+    def test_legacy_key_is_kept_when_keyring_migration_fails(self) -> None:
+        config_path = Path(self.temp_dir.name) / "config.json"
+        config_path.write_text(json.dumps({"LLM_API_KEY": "legacy-secret"}), encoding="utf-8")
+
+        with (
+            patch("lobesync.config._CONFIG_FILE", config_path),
+            patch("lobesync.config.store_api_key", side_effect=RuntimeError("keyring unavailable")),
+        ):
+            legacy_config = Config()
+            self.assertEqual(legacy_config._load()["LLM_API_KEY"], "legacy-secret")
+
+        self.assertEqual(json.loads(config_path.read_text(encoding="utf-8"))["LLM_API_KEY"], "legacy-secret")
+
+    def test_turn_failure_message_does_not_claim_data_was_unchanged(self) -> None:
+        self.assertNotIn("data was not changed", TURN_FAILURE_MESSAGE.lower())
+        self.assertIn("may have changed", TURN_FAILURE_MESSAGE.lower())
 
     def test_executor_reports_database_errors(self) -> None:
         with patch.dict(

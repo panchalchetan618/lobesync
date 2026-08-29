@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -11,6 +12,9 @@ load_dotenv(".env")
 
 _CONFIG_FILE = Path.home() / ".lobesync" / "config.json"
 _KEYRING_SERVICE = "lobesync"
+_LEGACY_API_KEY_FIELDS = ("LLM_API_KEY", "ANTHROPIC_API_KEY")
+
+logger = logging.getLogger(__name__)
 
 
 def config_file_path() -> Path:
@@ -66,6 +70,31 @@ def get_api_key(provider_id: str, *, allow_environment: bool = True) -> str | No
     return os.getenv("LLM_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
 
 
+def _migrate_legacy_api_key(values: dict) -> dict:
+    """Move a legacy plaintext key to keyring without risking data loss."""
+    legacy_key = next((values.get(field) for field in _LEGACY_API_KEY_FIELDS if values.get(field)), None)
+    if not legacy_key:
+        return values
+
+    provider_id = values.get("LLM_PROVIDER") or os.getenv("LLM_PROVIDER") or "anthropic"
+    try:
+        store_api_key(str(provider_id), str(legacy_key))
+    except RuntimeError:
+        # Keep the old value so the user does not lose access if keyring is unavailable.
+        logger.warning(
+            "Could not migrate a legacy API key to the operating system credential store. "
+            "The existing local configuration was left unchanged."
+        )
+        return values
+
+    migrated_values = values.copy()
+    for field in _LEGACY_API_KEY_FIELDS:
+        migrated_values.pop(field, None)
+    write_file_config(migrated_values)
+    logger.info("Migrated a legacy API key to the operating system credential store")
+    return migrated_values
+
+
 def validate_openai_base_url(value: str) -> str:
     """Accept HTTPS endpoints and explicitly local HTTP endpoints only."""
     parsed = urlsplit(value.strip())
@@ -92,37 +121,26 @@ class Config:
 
     def _load(self) -> dict:
         if self._cache is None:
-            self._cache = _read_file()
+            self._cache = _migrate_legacy_api_key(_read_file())
         return self._cache
 
     def reload(self) -> None:
-        self._cache = _read_file()
+        self._cache = _migrate_legacy_api_key(_read_file())
 
     def set_memory_enabled(self, enabled: bool) -> None:
         values = self._load().copy()
-        legacy_key = values.get("LLM_API_KEY") or values.get("ANTHROPIC_API_KEY")
-        if legacy_key:
-            store_api_key(self.LLM_PROVIDER, legacy_key)
         values["MEMORY_ENABLED"] = enabled
-        values.pop("LLM_API_KEY", None)
-        values.pop("ANTHROPIC_API_KEY", None)
         write_file_config(values)
         self._cache = values
 
     def update_llm_settings(self, provider: str, model: str, base_url: str | None = None) -> None:
         values = self._load().copy()
-        legacy_key = values.get("LLM_API_KEY") or values.get("ANTHROPIC_API_KEY")
-        if legacy_key:
-            legacy_provider = values.get("LLM_PROVIDER", "anthropic")
-            store_api_key(legacy_provider, legacy_key)
         values["LLM_PROVIDER"] = provider
         values["LLM_MODEL"] = model
         if base_url:
             values["LLM_BASE_URL"] = validate_openai_base_url(base_url)
         else:
             values.pop("LLM_BASE_URL", None)
-        values.pop("LLM_API_KEY", None)
-        values.pop("ANTHROPIC_API_KEY", None)
         write_file_config(values)
         self._cache = values
 

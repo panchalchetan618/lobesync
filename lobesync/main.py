@@ -12,6 +12,10 @@ from lobesync.wizard import BANNER, load_config, run_wizard
 
 logging.basicConfig(level=logging.WARNING)
 console = Console()
+TURN_FAILURE_MESSAGE = (
+    "That request could not be completed. Some data may have changed; "
+    "check your records before retrying."
+)
 
 
 def _ensure_configured():
@@ -150,7 +154,7 @@ def main():
             result = _invoke_graph(graph, app_state, user_input)
         except Exception:
             logging.info("Conversation turn failed")
-            console.print("[red]That request could not be completed. Your data was not changed.[/red]")
+            console.print(f"[red]{TURN_FAILURE_MESSAGE}[/red]")
             continue
 
         if result.get("bulk_delete_confirmation_required"):
