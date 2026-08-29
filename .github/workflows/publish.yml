@@ -21,7 +21,10 @@ jobs:
 
       - name: Build package
         run: |
-          pip install build
+          pip install -e .[dev]
+          python -m ruff check .
+          python -m mypy lobesync
+          python -m pytest
           python -m build
 
       - name: Publish to PyPI

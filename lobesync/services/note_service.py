@@ -1,12 +1,13 @@
-from sqlmodel import Session
 import logging
+
+from sqlmodel import Session
 
 from lobesync.db.repos.note_repo import (
     create_note,
+    delete_note,
     get_all_notes,
     get_note_by_id,
     update_note,
-    delete_note,
 )
 from lobesync.exceptions.note_exceptions import NoteNotFoundError
 
@@ -62,7 +63,9 @@ def get_note_service(session: Session, note_id: int):
     return note
 
 
-def update_note_service(session: Session, note_id: int, title: str | None = None, content: str | None = None):
+def update_note_service(
+    session: Session, note_id: int, title: str | None = None, content: str | None = None
+):
     """
     Updates a note's title and/or content. Raises if not found.
 

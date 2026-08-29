@@ -1,9 +1,11 @@
-from sqlmodel import Session, select
-from sqlalchemy.exc import SQLAlchemyError
-from lobesync.db.models import Task, TaskStatus
-from typing import List
 import logging
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session, select
+
+from lobesync.db.models import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ def create_task(
         return None
 
 
-def get_all_tasks(session: Session) -> List[Task] | None:
+def get_all_tasks(session: Session) -> Sequence[Task] | None:
     """
     Retrieves all tasks from the database.
 
@@ -77,7 +79,7 @@ def get_task_by_title(session: Session, title: str) -> Task | None:
     """
     try:
         return session.exec(
-            select(Task).where(Task.title.ilike(f"%{title}%"))
+            select(Task).where(Task.title.ilike(f"%{title}%"))  # type: ignore[attr-defined]
         ).first()
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_task_by_title] Failed. Error: {e}")
@@ -102,7 +104,7 @@ def get_task_by_id(session: Session, task_id: int) -> Task | None:
         return None
 
 
-def get_tasks_by_status(session: Session, status: TaskStatus) -> List[Task] | None:
+def get_tasks_by_status(session: Session, status: TaskStatus) -> Sequence[Task] | None:
     """
     Retrieves tasks whose status matches the given value.
 
@@ -114,16 +116,14 @@ def get_tasks_by_status(session: Session, status: TaskStatus) -> List[Task] | No
         List[Task] | None: Matching tasks if any, otherwise None.
     """
     try:
-        tasks = session.exec(
-            select(Task).where(Task.status == status)
-        ).all()
+        tasks = session.exec(select(Task).where(Task.status == status)).all()
         return tasks or None
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tasks_by_status] Failed. Error: {e}")
         return None
 
 
-def get_tasks_by_checklist(session: Session, checklist_id: int) -> List[Task] | None:
+def get_tasks_by_checklist(session: Session, checklist_id: int) -> Sequence[Task] | None:
     """
     Retrieves all tasks linked to a given checklist.
 
@@ -135,9 +135,7 @@ def get_tasks_by_checklist(session: Session, checklist_id: int) -> List[Task] | 
         List[Task] | None: Tasks for that checklist if any, otherwise None.
     """
     try:
-        tasks = session.exec(
-            select(Task).where(Task.checklist_id == checklist_id)
-        ).all()
+        tasks = session.exec(select(Task).where(Task.checklist_id == checklist_id)).all()
         return tasks or None
     except SQLAlchemyError as e:
         logger.error(f"[(REPO) get_tasks_by_checklist] Failed. Error: {e}")
@@ -180,7 +178,7 @@ def update_task(
         if deadline is not None:
             task.deadline = deadline
 
-        task.updated_at = datetime.now()
+        task.updated_at = datetime.now(UTC)
 
         session.add(task)
         session.flush()

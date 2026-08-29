@@ -1,23 +1,26 @@
-from sqlmodel import Session
 import logging
 
+from sqlmodel import Session
+
+from lobesync.db.models import CheckListItem, TaskStatus
 from lobesync.db.repos.checklist_repo import (
     create_checklist,
-    get_checklist_by_id,
-    get_all_checklists,
-    update_checklist,
-    delete_checklist,
     create_checklist_item,
+    delete_checklist,
+    get_all_checklists,
+    get_checklist_by_id,
     get_items_by_checklist,
     toggle_checklist_item,
+    update_checklist,
+)
+from lobesync.db.repos.checklist_repo import (
     delete_checklist_item as repo_delete_checklist_item,
 )
 from lobesync.db.repos.task_repo import get_tasks_by_checklist
-from lobesync.db.models import TaskStatus, CheckListItem
 from lobesync.exceptions.checklist_exceptions import (
-    ChecklistNotFoundError,
-    ChecklistItemNotFoundError,
     ChecklistHasPendingTasksError,
+    ChecklistItemNotFoundError,
+    ChecklistNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +74,9 @@ def get_checklist_service(session: Session, checklist_id: int):
     return checklist
 
 
-def update_checklist_service(session: Session, checklist_id: int, title: str | None = None, description: str | None = None):
+def update_checklist_service(
+    session: Session, checklist_id: int, title: str | None = None, description: str | None = None
+):
     """
     Updates a checklist's title and/or description. Raises if not found.
 
@@ -123,7 +128,9 @@ def delete_checklist_service(session: Session, checklist_id: int):
     return delete_checklist(session, checklist_id)
 
 
-def create_checklist_item_service(session: Session, checklist_id: int, title: str, description: str | None = None):
+def create_checklist_item_service(
+    session: Session, checklist_id: int, title: str, description: str | None = None
+):
     """
     Creates a new item under a checklist. Raises if checklist not found.
 
